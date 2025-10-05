@@ -2624,15 +2624,24 @@ def send_poll(context: CallbackContext):
                     allows_multiple_answers=poll.get('allow_multiple_answers', True)  # Множественный выбор по умолчанию
                 )
                 
-                # Добавляем кнопку "Результаты" для мобильных устройств
-                keyboard = [[InlineKeyboardButton("📊 Результаты", callback_data=f"poll_results_{poll_message.poll.id}")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                # Определяем тип чата для кнопки "Результаты"
+                try:
+                    chat_info = context.bot.get_chat(cid)
+                    is_private_chat = chat_info.type == 'private'
+                except:
+                    # Если не можем получить информацию о чате, считаем что это не личка
+                    is_private_chat = False
                 
-                context.bot.send_message(
-                    chat_id=cid,
-                    text="👆 Проголосуйте выше и нажмите кнопку для просмотра результатов:",
-                    reply_markup=reply_markup
-                )
+                # Добавляем кнопку "Результаты" только для личных чатов
+                if is_private_chat:
+                    keyboard = [[InlineKeyboardButton("📊 Результаты", callback_data=f"poll_results_{poll_message.poll.id}")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    context.bot.send_message(
+                        chat_id=cid,
+                        text="👆 Проголосуйте выше и нажмите кнопку для просмотра результатов:",
+                        reply_markup=reply_markup
+                    )
                 
                 logger.info(f"✅ Poll sent to chat {cid} at {moscow_time}")
                 total_sent += 1
