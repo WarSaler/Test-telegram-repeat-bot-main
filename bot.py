@@ -2478,14 +2478,12 @@ def send_poll(context: CallbackContext):
             if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
                 try:
                     sheets_manager.log_poll_sent(
-                        utc_time=utc_time,
-                        moscow_time=moscow_time,
-                        poll_id=poll_id,
-                        chat_id="NO_CHATS",
-                        status="NO_RECIPIENTS",
-                        error="No active chats available for delivery",
-                        question_preview=poll.get('question', '')[:50] + "..." if len(poll.get('question', '')) > 50 else poll.get('question', '')
-                    )
+                    poll_id=poll_id,
+                    chat_id="NO_CHATS",
+                    status="NO_RECIPIENTS",
+                    error="No active chats available for delivery",
+                    question_preview=poll.get('question', '')[:50] + "..." if len(poll.get('question', '')) > 50 else poll.get('question', '')
+                )
                     logger.info(f"📊 Logged 'no recipients' status for poll #{poll_id}")
                 except Exception as e:
                     logger.error(f"❌ Error logging 'no recipients' to Google Sheets: {e}")
@@ -2549,8 +2547,6 @@ def send_poll(context: CallbackContext):
         if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
             try:
                 sheets_manager.log_poll_sent(
-                    utc_time=utc_time,
-                    moscow_time=moscow_time,
                     poll_id=poll_id,
                     chat_id="ALL",
                     status="SENDING",
@@ -2609,8 +2605,6 @@ def send_poll(context: CallbackContext):
             if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
                 try:
                     sheets_manager.log_poll_sent(
-                        utc_time=utc_time,
-                        moscow_time=moscow_time,
                         poll_id=poll_id,
                         chat_id=str(cid),
                         status=delivery_status,
@@ -2698,8 +2692,6 @@ def send_poll(context: CallbackContext):
                 utc_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
                 moscow_time = get_moscow_time().strftime("%H:%M MSK")
                 sheets_manager.log_poll_sent(
-                    utc_time=utc_time,
-                    moscow_time=moscow_time,
                     poll_id=poll_id,
                     chat_id="ERROR",
                     status="CRITICAL_ERROR",
