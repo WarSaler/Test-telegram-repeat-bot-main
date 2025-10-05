@@ -1059,6 +1059,40 @@ class SheetsManager:
         except Exception as e:
             logger.error(f"Error backing up polls: {e}")
     
+    def get_max_poll_id(self) -> int:
+        """Получение максимального ID голосования из Google Sheets"""
+        if not self.is_initialized:
+            return 0
+        
+        try:
+            worksheet = self.spreadsheet.worksheet('Polls')
+            
+            # Безопасно получаем записи
+            try:
+                records = worksheet.get_all_records()
+            except Exception as e:
+                logger.warning(f"Could not get records from Polls, sheet may be empty: {e}")
+                return 0
+            
+            if not records:
+                return 0
+            
+            max_id = 0
+            for record in records:
+                try:
+                    poll_id = int(record.get('ID', '0'))
+                    if poll_id > max_id:
+                        max_id = poll_id
+                except (ValueError, TypeError):
+                    continue
+            
+            logger.debug(f"Max poll ID from Google Sheets: {max_id}")
+            return max_id
+            
+        except Exception as e:
+            logger.error(f"Error getting max poll ID from Google Sheets: {e}")
+            return 0
+    
     def restore_polls_from_sheets(self, target_file="polls.json"):
         """Восстановление активных голосований из Google Sheets"""
         if not self.is_initialized:

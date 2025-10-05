@@ -1193,9 +1193,9 @@ def clear_reminders(update: Update, context: CallbackContext):
         logger.error(f"Error in clear_reminders: {e}")
         update.message.reply_text("❌ Ошибка при очистке напоминаний")
 
-# --- Восстановление напоминаний из Google Sheets ---
+# --- Восстановление напоминаний и голосований из Google Sheets ---
 def restore_reminders(update: Update, context: CallbackContext):
-    """Восстановление активных напоминаний из Google Sheets"""
+    """Восстановление активных напоминаний и голосований из Google Sheets"""
     try:
         # Проверяем доступность Google Sheets
         if not SHEETS_AVAILABLE or not sheets_manager:
@@ -1228,7 +1228,7 @@ def restore_reminders(update: Update, context: CallbackContext):
             progress_message = update.message.reply_text(
                 "🔄 <b>Восстановление данных...</b>\n\n"
                 "📊 Получение данных из Google Sheets...\n"
-                "🔄 Восстановление напоминаний и чатов...",
+                "🔄 Восстановление напоминаний, голосований и чатов...",
                 parse_mode=ParseMode.HTML
             )
         except:
@@ -1308,31 +1308,62 @@ def restore_reminders(update: Update, context: CallbackContext):
         # Восстанавливаем напоминания
         success, message = sheets_manager.restore_reminders_from_sheets()
         
-        if success:
-            # Перепланируем все напоминания
-            reschedule_all_reminders(context.dispatcher.job_queue)
+        # Обновляем сообщение о прогрессе для голосований
+        try:
+            context.bot.edit_message_text(
+                chat_id=progress_message.chat_id,
+                message_id=progress_message.message_id,
+                text="🔄 <b>Восстановление данных...</b>\n\n"
+                     "📊 Восстановление голосований...",
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            pass
+        
+        # Восстанавливаем голосования
+        polls_success, polls_message = sheets_manager.restore_polls_from_sheets()
+        
+        if success or polls_success:
+            # Перепланируем все напоминания и голосования
+            if success:
+                reschedule_all_reminders(context.dispatcher.job_queue)
+            if polls_success:
+                reschedule_all_polls(context.dispatcher.job_queue)
             
             # Получаем количество восстановленных напоминаний
             try:
                 restored_reminders = load_reminders()
-                count = len(restored_reminders)
+                reminders_count = len(restored_reminders)
                 
-                # Подсчитываем по типам
+                # Подсчитываем напоминания по типам
                 once_count = sum(1 for r in restored_reminders if r.get('type') == 'once')
                 daily_count = sum(1 for r in restored_reminders if r.get('type') == 'daily')
                 weekly_count = sum(1 for r in restored_reminders if r.get('type') == 'weekly')
                 
+                # Получаем количество восстановленных голосований
+                restored_polls = load_polls()
+                polls_count = len(restored_polls)
+                
+                # Подсчитываем голосования по типам
+                polls_once_count = sum(1 for p in restored_polls if p.get('type') == 'once')
+                polls_daily_count = sum(1 for p in restored_polls if p.get('type') == 'daily')
+                polls_weekly_count = sum(1 for p in restored_polls if p.get('type') == 'weekly')
+                
                 # Формируем итоговое сообщение
                 final_message = (
                     f"✅ <b>Восстановление завершено успешно!</b>\n\n"
-                    f"📋 <b>Восстановлено напоминаний: {count}</b>\n"
+                    f"📋 <b>Восстановлено напоминаний: {reminders_count}</b>\n"
                     f"📅 Разовых: {once_count}\n"
                     f"🔄 Ежедневных: {daily_count}\n"
                     f"📆 Еженедельных: {weekly_count}\n\n"
+                    f"📊 <b>Восстановлено голосований: {polls_count}</b>\n"
+                    f"📅 Разовых: {polls_once_count}\n"
+                    f"🔄 Ежедневных: {polls_daily_count}\n"
+                    f"📆 Еженедельных: {polls_weekly_count}\n\n"
                     f"📱 <b>Подписанные чаты:</b>\n"
                     f"{'✅ ' + chats_message if chats_restored else '⚠️ ' + chats_message}\n\n"
-                    f"⏰ Все напоминания перепланированы и активны!\n"
-                    f"<i>Команды: /list_reminders для просмотра</i>"
+                    f"⏰ Все напоминания и голосования перепланированы и активны!\n"
+                    f"<i>Команды: /list_reminders, /list_polls для просмотра</i>"
                 )
                 
                 try:
@@ -1350,13 +1381,18 @@ def restore_reminders(update: Update, context: CallbackContext):
                         f"📅 Разовых: {once_count}\n"
                         f"🔄 Ежедневных: {daily_count}\n"
                         f"📆 Еженедельных: {weekly_count}\n\n"
+                        f"🗳️ Восстановлено голосований: {poll_count}\n"
+                        f"📅 Разовых: {poll_once_count}\n"
+                        f"🔄 Ежедневных: {poll_daily_count}\n"
+                        f"📆 Еженедельных: {poll_weekly_count}\n\n"
                         f"📱 Подписанные чаты:\n"
                         f"{chats_message}\n\n"
-                        f"⏰ Все напоминания перепланированы и активны!"
+                        f"⏰ Все напоминания и голосования перепланированы и активны!\n\n"
+                        f"Используйте /list_reminders и /list_polls для просмотра."
                     )
                     update.message.reply_text(clean_message)
                 
-                logger.info(f"✅ Successfully restored {count} reminders and {chats_count if chats_restored else 0} chats for user {username} (ID: {user_id})")
+                logger.info(f"✅ Successfully restored {count} reminders, {poll_count} polls and {chats_count if chats_restored else 0} chats for user {username} (ID: {user_id})")
                 
             except Exception as e:
                 logger.error(f"Error getting restored data count: {e}")
@@ -1373,25 +1409,25 @@ def restore_reminders(update: Update, context: CallbackContext):
                     update.message.reply_text(f"✅ Восстановление завершено!\n\n📋 {message}\n📱 {chats_message}")
         
         else:
-            # Ошибка восстановления напоминаний
+            # Ошибка восстановления данных
             try:
                 context.bot.edit_message_text(
                     chat_id=progress_message.chat_id,
                     message_id=progress_message.message_id,
-                    text=f"❌ <b>Ошибка восстановления напоминаний</b>\n\n"
+                    text=f"❌ <b>Ошибка восстановления данных</b>\n\n"
                          f"📋 {message}\n\n"
                          f"📱 <b>Подписанные чаты:</b>\n"
                          f"{'✅ ' + chats_message if chats_restored else '⚠️ ' + chats_message}\n\n"
                          f"💡 <i>Попробуйте:</i>\n"
                          f"• Проверить доступ к Google Sheets\n"
-                         f"• Убедиться, что в листе есть активные напоминания\n"
+                         f"• Убедиться, что в листах есть активные напоминания и голосования\n"
                          f"• Обратиться к администратору",
                     parse_mode=ParseMode.HTML
                 )
             except:
-                update.message.reply_text(f"❌ Ошибка восстановления напоминаний\n\n📋 {message}\n📱 {chats_message}")
+                update.message.reply_text(f"❌ Ошибка восстановления данных\n\n📋 {message}\n📱 {chats_message}")
             
-            logger.error(f"❌ Failed to restore reminders for user {username}: {message}")
+            logger.error(f"❌ Failed to restore data for user {username}: {message}")
         
         # Логируем завершение операции
         if sheets_manager.is_initialized:
@@ -1403,14 +1439,14 @@ def restore_reminders(update: Update, context: CallbackContext):
                     user_id=str(user_id),
                     username=username,
                     chat_id=chat_id,
-                    details=f"Manual restore {'successful' if success else 'failed'}: Reminders: {message}, Chats: {chats_message}",
+                    details=f"Manual restore {'successful' if success else 'failed'}: Data: {message}, Chats: {chats_message}",
                     reminder_id=""
                 )
             except Exception as e:
                 logger.error(f"Error logging restore completion: {e}")
                 
     except Exception as e:
-        logger.error(f"Error in restore_reminders: {e}")
+        logger.error(f"Error in restore function: {e}")
         try:
             update.message.reply_text(
                 "❌ <b>Критическая ошибка восстановления</b>\n\n"
@@ -2580,13 +2616,24 @@ def send_poll(context: CallbackContext):
             
             try:
                 # Отправляем голосование
-                context.bot.send_poll(
+                poll_message = context.bot.send_poll(
                     chat_id=cid,
                     question=poll.get('question', ''),
                     options=poll.get('options', []),
                     is_anonymous=False,  # Неанонимное голосование
                     allows_multiple_answers=poll.get('allow_multiple_answers', True)  # Множественный выбор по умолчанию
                 )
+                
+                # Добавляем кнопку "Результаты" для мобильных устройств
+                keyboard = [[InlineKeyboardButton("📊 Результаты", callback_data=f"poll_results_{poll_message.message_id}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                context.bot.send_message(
+                    chat_id=cid,
+                    text="👆 Проголосуйте выше и нажмите кнопку для просмотра результатов:",
+                    reply_markup=reply_markup
+                )
+                
                 logger.info(f"✅ Poll sent to chat {cid} at {moscow_time}")
                 total_sent += 1
                 
@@ -3953,6 +4000,69 @@ def handle_unsubscribe_button(update: Update, context: CallbackContext):
         except:
             pass
 
+def handle_poll_results_button(update: Update, context: CallbackContext):
+    """
+    Обработчик INLINE кнопки "Результаты" для голосований
+    """
+    try:
+        query = update.callback_query
+        query.answer()  # Подтверждаем нажатие кнопки
+        
+        # Извлекаем ID сообщения с голосованием из callback_data
+        callback_data = query.data
+        if callback_data.startswith("poll_results_"):
+            poll_message_id = callback_data.replace("poll_results_", "")
+            
+            try:
+                # Получаем информацию о голосовании
+                poll_info = context.bot.get_poll(poll_message_id)
+                
+                # Формируем текст с результатами
+                results_text = f"📊 <b>Результаты голосования:</b>\n\n"
+                results_text += f"❓ <b>{poll_info.question}</b>\n\n"
+                
+                total_votes = poll_info.total_voter_count
+                results_text += f"👥 Всего голосов: {total_votes}\n\n"
+                
+                if total_votes > 0:
+                    for i, option in enumerate(poll_info.options):
+                        percentage = (option.voter_count / total_votes) * 100 if total_votes > 0 else 0
+                        bar_length = int(percentage / 10)  # Полоска из 10 символов максимум
+                        bar = "█" * bar_length + "░" * (10 - bar_length)
+                        results_text += f"{i+1}. {option.text}\n"
+                        results_text += f"   {bar} {option.voter_count} ({percentage:.1f}%)\n\n"
+                else:
+                    results_text += "Пока никто не проголосовал 🤷‍♂️"
+                
+                try:
+                    query.edit_message_text(
+                        results_text,
+                        parse_mode=ParseMode.HTML
+                    )
+                except:
+                    query.edit_message_text(
+                        results_text.replace("<b>", "").replace("</b>", "")
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error getting poll info: {e}")
+                try:
+                    query.edit_message_text(
+                        "❌ <b>Не удалось получить результаты голосования</b>\n\n"
+                        "Возможно, голосование уже завершено или недоступно",
+                        parse_mode=ParseMode.HTML
+                    )
+                except:
+                    query.edit_message_text(
+                        "❌ Не удалось получить результаты голосования\n\n"
+                        "Возможно, голосование уже завершено или недоступно"
+                    )
+        else:
+            logger.error(f"Invalid callback_data format: {callback_data}")
+            
+    except Exception as e:
+        logger.error(f"Error in handle_poll_results_button: {e}")
+
 def main():
     try:
         global BOT_START_TIME
@@ -4082,13 +4192,14 @@ def main():
         
         dp.add_handler(CommandHandler("clear_reminders", clear_reminders))
         dp.add_handler(CommandHandler("clear_polls", clear_polls))
-        dp.add_handler(CommandHandler("restore_reminders", restore_reminders))
+        dp.add_handler(CommandHandler("restore", restore_reminders))
         dp.add_handler(CommandHandler("next", next_notification))
         dp.add_handler(CommandHandler("status", bot_status))
         dp.add_handler(CommandHandler("unsubscribe", unsubscribe_command))  # 🆕 Команда отписки
         
         # 🆕 Обработчик INLINE кнопок
         dp.add_handler(CallbackQueryHandler(handle_unsubscribe_button, pattern="^unsubscribe$"))
+        dp.add_handler(CallbackQueryHandler(handle_poll_results_button, pattern="^poll_results_"))
 
         # Добавляем обработчик ошибок
         dp.add_error_handler(error_handler)
