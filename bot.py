@@ -2010,7 +2010,7 @@ def receive_poll_options(update: Update, context: CallbackContext):
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
             "days_of_week": None,
-            "allow_multiple_answers": True
+            "allow_multiple_answers": False
         }
         
         polls.append(new_poll)
@@ -2183,7 +2183,7 @@ def receive_daily_poll_options(update: Update, context: CallbackContext):
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
             "days_of_week": None,
-            "allow_multiple_answers": True
+            "allow_multiple_answers": False
         }
         
         polls.append(new_poll)
@@ -2390,7 +2390,7 @@ def receive_weekly_poll_options(update: Update, context: CallbackContext):
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
             "days_of_week": [context.user_data['weekly_poll_day']],
-            "allow_multiple_answers": True
+            "allow_multiple_answers": False
         }
         
         polls.append(new_poll)
@@ -2575,7 +2575,7 @@ def send_poll(context: CallbackContext):
                     question=poll.get('question', ''),
                     options=poll.get('options', []),
                     is_anonymous=False,  # Неанонимное голосование
-                    allows_multiple_answers=poll.get('allows_multiple_answers', True)  # Разрешаем множественный выбор
+                    allows_multiple_answers=poll.get('allows_multiple_answers', False)  # Одиночный выбор для отображения кнопки "Результаты" на всех устройствах
                 )
                 logger.info(f"✅ Poll sent to chat {cid} at {moscow_time}")
                 total_sent += 1
