@@ -1377,14 +1377,14 @@ def restore_reminders(update: Update, context: CallbackContext):
                     # Fallback без HTML
                     clean_message = (
                         f"✅ Восстановление завершено успешно!\n\n"
-                        f"📋 Восстановлено напоминаний: {count}\n"
+                        f"📋 Восстановлено напоминаний: {reminders_count}\n"
                         f"📅 Разовых: {once_count}\n"
                         f"🔄 Ежедневных: {daily_count}\n"
                         f"📆 Еженедельных: {weekly_count}\n\n"
-                        f"🗳️ Восстановлено голосований: {poll_count}\n"
-                        f"📅 Разовых: {poll_once_count}\n"
-                        f"🔄 Ежедневных: {poll_daily_count}\n"
-                        f"📆 Еженедельных: {poll_weekly_count}\n\n"
+                        f"🗳️ Восстановлено голосований: {polls_count}\n"
+                        f"📅 Разовых: {polls_once_count}\n"
+                        f"🔄 Ежедневных: {polls_daily_count}\n"
+                        f"📆 Еженедельных: {polls_weekly_count}\n\n"
                         f"📱 Подписанные чаты:\n"
                         f"{chats_message}\n\n"
                         f"⏰ Все напоминания и голосования перепланированы и активны!\n\n"
@@ -1392,7 +1392,7 @@ def restore_reminders(update: Update, context: CallbackContext):
                     )
                     update.message.reply_text(clean_message)
                 
-                logger.info(f"✅ Successfully restored {count} reminders, {poll_count} polls and {chats_count if chats_restored else 0} chats for user {username} (ID: {user_id})")
+                logger.info(f"✅ Successfully restored {reminders_count} reminders, {polls_count} polls and {chats_count if chats_restored else 0} chats for user {username} (ID: {user_id})")
                 
             except Exception as e:
                 logger.error(f"Error getting restored data count: {e}")
