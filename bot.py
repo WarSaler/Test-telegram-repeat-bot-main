@@ -375,20 +375,30 @@ def get_next_poll_id():
     """
     try:
         polls = load_polls()
-        if not polls:
-            return "1"
         
-        # Найти максимальный ID и добавить 1
-        max_id = 0
-        for poll in polls:
+        # Также проверяем Google Sheets для получения максимального ID
+        sheets_max_id = 0
+        if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
             try:
-                poll_id = int(poll.get("id", "0"))
-                if poll_id > max_id:
-                    max_id = poll_id
-            except ValueError:
-                continue
+                sheets_max_id = sheets_manager.get_max_poll_id()
+            except Exception as e:
+                logger.warning(f"Could not get max ID from sheets: {e}")
         
+        # Найти максимальный ID из локальных данных
+        local_max_id = 0
+        if polls:
+            for poll in polls:
+                try:
+                    poll_id = int(poll.get("id", "0"))
+                    if poll_id > local_max_id:
+                        local_max_id = poll_id
+                except ValueError:
+                    continue
+        
+        # Используем максимальный ID из обеих источников
+        max_id = max(local_max_id, sheets_max_id)
         return str(max_id + 1)
+        
     except Exception as e:
         logger.error(f"Error generating poll ID: {e}")
         return "1"
@@ -2010,7 +2020,7 @@ def receive_poll_options(update: Update, context: CallbackContext):
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
             "days_of_week": None,
-            "allow_multiple_answers": False
+            "allow_multiple_answers": True
         }
         
         polls.append(new_poll)
@@ -2183,7 +2193,7 @@ def receive_daily_poll_options(update: Update, context: CallbackContext):
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
             "days_of_week": None,
-            "allow_multiple_answers": False
+            "allow_multiple_answers": True
         }
         
         polls.append(new_poll)
@@ -2390,7 +2400,7 @@ def receive_weekly_poll_options(update: Update, context: CallbackContext):
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
             "days_of_week": [context.user_data['weekly_poll_day']],
-            "allow_multiple_answers": False
+            "allow_multiple_answers": True
         }
         
         polls.append(new_poll)
@@ -2575,7 +2585,7 @@ def send_poll(context: CallbackContext):
                     question=poll.get('question', ''),
                     options=poll.get('options', []),
                     is_anonymous=False,  # Неанонимное голосование
-                    allows_multiple_answers=poll.get('allows_multiple_answers', False)  # Одиночный выбор для отображения кнопки "Результаты" на всех устройствах
+                    allows_multiple_answers=poll.get('allow_multiple_answers', True)  # Множественный выбор по умолчанию
                 )
                 logger.info(f"✅ Poll sent to chat {cid} at {moscow_time}")
                 total_sent += 1
