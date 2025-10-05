@@ -2001,8 +2001,8 @@ def receive_poll_options(update: Update, context: CallbackContext):
             "id": poll_id,
             "question": context.user_data['poll_question'],
             "options": options,
-            "time_msk": context.user_data['poll_datetime'].strftime("%d.%m.%Y %H:%M"),
-            "type": "one_time",
+            "datetime": context.user_data['poll_datetime'].strftime("%Y-%m-%d %H:%M"),
+            "type": "once",
             "chat_id": update.effective_chat.id,
             "chat_name": update.effective_chat.title or update.effective_user.first_name or "Unknown",
             "status": "active",
@@ -2174,7 +2174,7 @@ def receive_daily_poll_options(update: Update, context: CallbackContext):
             "id": poll_id,
             "question": context.user_data['daily_poll_question'],
             "options": options,
-            "time_msk": context.user_data['daily_poll_time'].strftime("%H:%M"),
+            "time": context.user_data['daily_poll_time'].strftime("%H:%M"),
             "type": "daily",
             "chat_id": update.effective_chat.id,
             "chat_name": update.effective_chat.title or update.effective_user.first_name or "Unknown",
@@ -2380,7 +2380,8 @@ def receive_weekly_poll_options(update: Update, context: CallbackContext):
             "id": poll_id,
             "question": context.user_data['weekly_poll_question'],
             "options": options,
-            "time_msk": context.user_data['weekly_poll_time'].strftime("%H:%M"),
+            "time": context.user_data['weekly_poll_time'].strftime("%H:%M"),
+            "day": context.user_data['weekly_poll_day'],
             "type": "weekly",
             "chat_id": update.effective_chat.id,
             "chat_name": update.effective_chat.title or update.effective_user.first_name or "Unknown",
@@ -3181,9 +3182,9 @@ def schedule_all_polls(job_queue):
     """
     polls = load_polls()
     for poll in polls:
-        if poll.get("status") == "Active":
+        if poll.get("status") == "active":
             schedule_poll(job_queue, poll)
-    logger.info(f"Scheduled {len([p for p in polls if p.get('status') == 'Active'])} active polls")
+    logger.info(f"Scheduled {len([p for p in polls if p.get('status') == 'active'])} active polls")
 
 def reschedule_all_polls(job_queue):
     """
