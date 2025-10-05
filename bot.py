@@ -2625,7 +2625,7 @@ def send_poll(context: CallbackContext):
                 )
                 
                 # Добавляем кнопку "Результаты" для мобильных устройств
-                keyboard = [[InlineKeyboardButton("📊 Результаты", callback_data=f"poll_results_{poll_message.message_id}")]]
+                keyboard = [[InlineKeyboardButton("📊 Результаты", callback_data=f"poll_results_{poll_message.poll.id}")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 context.bot.send_message(
@@ -4008,31 +4008,33 @@ def handle_poll_results_button(update: Update, context: CallbackContext):
         query = update.callback_query
         query.answer()  # Подтверждаем нажатие кнопки
         
-        # Извлекаем ID сообщения с голосованием из callback_data
+        # Извлекаем ID голосования из callback_data
         callback_data = query.data
         if callback_data.startswith("poll_results_"):
-            poll_message_id = callback_data.replace("poll_results_", "")
+            poll_id = callback_data.replace("poll_results_", "")
             
             try:
-                # Получаем информацию о голосовании
-                poll_info = context.bot.get_poll(poll_message_id)
+                # Простое решение: показываем сообщение о том, что нужно использовать встроенную функцию
+                # В старых версиях python-telegram-bot нет прямого доступа к актуальным результатам голосования
+                chat_id = query.message.chat_id
                 
-                # Формируем текст с результатами
-                results_text = f"📊 <b>Результаты голосования:</b>\n\n"
-                results_text += f"❓ <b>{poll_info.question}</b>\n\n"
+                results_text = "📊 <b>Просмотр результатов голосования</b>\n\n"
+                results_text += "Для просмотра актуальных результатов голосования используйте встроенную функцию Telegram:\n\n"
+                results_text += "1️⃣ Нажмите на само голосование выше\n"
+                results_text += "2️⃣ В открывшемся окне нажмите \"Посмотреть результаты\"\n\n"
+                results_text += "Это покажет вам самые актуальные результаты с процентами и количеством голосов. 📈"
                 
-                total_votes = poll_info.total_voter_count
-                results_text += f"👥 Всего голосов: {total_votes}\n\n"
+                # Создаем фиктивную poll_info для совместимости с остальным кодом
+                class FakePollInfo:
+                    def __init__(self):
+                        self.question = "Используйте встроенную функцию Telegram"
+                        self.total_voter_count = 0
+                        self.options = []
                 
-                if total_votes > 0:
-                    for i, option in enumerate(poll_info.options):
-                        percentage = (option.voter_count / total_votes) * 100 if total_votes > 0 else 0
-                        bar_length = int(percentage / 10)  # Полоска из 10 символов максимум
-                        bar = "█" * bar_length + "░" * (10 - bar_length)
-                        results_text += f"{i+1}. {option.text}\n"
-                        results_text += f"   {bar} {option.voter_count} ({percentage:.1f}%)\n\n"
-                else:
-                    results_text += "Пока никто не проголосовал 🤷‍♂️"
+                poll_info = FakePollInfo()
+                
+                # Используем уже сформированный текст с инструкциями
+                # results_text уже содержит нужное сообщение
                 
                 try:
                     query.edit_message_text(
