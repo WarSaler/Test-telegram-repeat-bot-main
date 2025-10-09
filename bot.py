@@ -2624,24 +2624,7 @@ def send_poll(context: CallbackContext):
                     allows_multiple_answers=poll.get('allow_multiple_answers', True)  # Множественный выбор по умолчанию
                 )
                 
-                # Определяем тип чата для кнопки "Результаты"
-                try:
-                    chat_info = context.bot.get_chat(cid)
-                    is_private_chat = chat_info.type == 'private'
-                except:
-                    # Если не можем получить информацию о чате, считаем что это не личка
-                    is_private_chat = False
-                
-                # Добавляем кнопку "Результаты" только для личных чатов
-                if is_private_chat:
-                    keyboard = [[InlineKeyboardButton("📊 Результаты", callback_data=f"poll_results_{poll_message.poll.id}")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    context.bot.send_message(
-                        chat_id=cid,
-                        text="👆 Проголосуйте выше и нажмите кнопку для просмотра результатов:",
-                        reply_markup=reply_markup
-                    )
+                # Кнопка "Результаты" убрана по запросу пользователя
                 
                 logger.info(f"✅ Poll sent to chat {cid} at {moscow_time}")
                 total_sent += 1
@@ -3388,6 +3371,52 @@ def ensure_reminders_file():
     save_reminders([])
     return False, 0
 
+def ensure_polls_file():
+    """🆕 Проверяет и восстанавливает polls.json при необходимости"""
+    try:
+        # Проверяем существует ли файл и не пустой ли он
+        existing_polls = load_polls()
+        if existing_polls and len(existing_polls) > 0:
+            logger.info(f"✅ Found {len(existing_polls)} existing polls")
+            return True, len(existing_polls)  # Файл в порядке
+    except Exception:
+        pass  # Файл отсутствует или поврежден
+    
+    # Детальная диагностика доступности Google Sheets для голосований
+    logger.warning("⚠️ polls.json is missing, empty or corrupted. Attempting restore from Google Sheets...")
+    logger.info(f"🔍 Google Sheets polls restore check:")
+    
+    if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
+        logger.info("   ✅ Google Sheets available for polls restore")
+        try:
+            success, message = sheets_manager.restore_polls_from_sheets()
+            if success:
+                restored_polls = load_polls()
+                restored_count = len(restored_polls)
+                logger.info(f"✅ Successfully restored {restored_count} polls from Google Sheets")
+                return True, restored_count
+            else:
+                logger.error(f"❌ Failed to restore polls from Google Sheets: {message}")
+        except Exception as e:
+            logger.error(f"❌ Exception during polls restore: {e}")
+    else:
+        logger.warning("📵 Google Sheets not available for polls restoration")
+        logger.warning("   This means:")
+        logger.warning("   1. Check GOOGLE_SHEETS_ID environment variable")
+        logger.warning("   2. Check GOOGLE_SHEETS_CREDENTIALS environment variable") 
+        logger.warning("   3. Verify Google Sheets API access")
+        logger.warning("   4. Ensure polls exist in Google Sheets with 'Active' status")
+    
+    # Создаем пустой файл как fallback
+    logger.warning("📝 Creating empty polls.json as fallback")
+    logger.warning("⚠️ ВНИМАНИЕ: Бот не сможет отправлять голосования без активных заданий!")
+    logger.warning("   Для работы бота нужно:")
+    logger.warning("   1. Создать голосования командами /poll, /poll_daily, /poll_weekly")
+    logger.warning("   2. Или восстановить из Google Sheets командой /restore_polls")
+    
+    save_polls([])
+    return False, 0
+
 def auto_sync_subscribed_chats(context: CallbackContext):
     """Автоматическая синхронизация subscribed_chats.json с Google Sheets каждый час"""
     try:
@@ -4009,70 +4038,7 @@ def handle_unsubscribe_button(update: Update, context: CallbackContext):
         except:
             pass
 
-def handle_poll_results_button(update: Update, context: CallbackContext):
-    """
-    Обработчик INLINE кнопки "Результаты" для голосований
-    """
-    try:
-        query = update.callback_query
-        query.answer()  # Подтверждаем нажатие кнопки
-        
-        # Извлекаем ID голосования из callback_data
-        callback_data = query.data
-        if callback_data.startswith("poll_results_"):
-            poll_id = callback_data.replace("poll_results_", "")
-            
-            try:
-                # Простое решение: показываем сообщение о том, что нужно использовать встроенную функцию
-                # В старых версиях python-telegram-bot нет прямого доступа к актуальным результатам голосования
-                chat_id = query.message.chat_id
-                
-                results_text = "📊 <b>Просмотр результатов голосования</b>\n\n"
-                results_text += "Для просмотра актуальных результатов голосования используйте встроенную функцию Telegram:\n\n"
-                results_text += "1️⃣ Нажмите на само голосование выше\n"
-                results_text += "2️⃣ В открывшемся окне нажмите \"Посмотреть результаты\"\n\n"
-                results_text += "Это покажет вам самые актуальные результаты с процентами и количеством голосов. 📈"
-                
-                # Создаем фиктивную poll_info для совместимости с остальным кодом
-                class FakePollInfo:
-                    def __init__(self):
-                        self.question = "Используйте встроенную функцию Telegram"
-                        self.total_voter_count = 0
-                        self.options = []
-                
-                poll_info = FakePollInfo()
-                
-                # Используем уже сформированный текст с инструкциями
-                # results_text уже содержит нужное сообщение
-                
-                try:
-                    query.edit_message_text(
-                        results_text,
-                        parse_mode=ParseMode.HTML
-                    )
-                except:
-                    query.edit_message_text(
-                        results_text.replace("<b>", "").replace("</b>", "")
-                    )
-                    
-            except Exception as e:
-                logger.error(f"Error getting poll info: {e}")
-                try:
-                    query.edit_message_text(
-                        "❌ <b>Не удалось получить результаты голосования</b>\n\n"
-                        "Возможно, голосование уже завершено или недоступно",
-                        parse_mode=ParseMode.HTML
-                    )
-                except:
-                    query.edit_message_text(
-                        "❌ Не удалось получить результаты голосования\n\n"
-                        "Возможно, голосование уже завершено или недоступно"
-                    )
-        else:
-            logger.error(f"Invalid callback_data format: {callback_data}")
-            
-    except Exception as e:
-        logger.error(f"Error in handle_poll_results_button: {e}")
+# Функция handle_poll_results_button удалена по запросу пользователя
 
 def main():
     try:
@@ -4104,6 +4070,15 @@ def main():
         else:
             logger.warning(f"⚠️ Reminders status: starting with empty reminders list")
             logger.warning("💡 TIP: Use /restore_reminders command to recover data from Google Sheets")
+        
+        # 🆕 ПРОВЕРЯЕМ И ВОССТАНАВЛИВАЕМ ГОЛОСОВАНИЯ ПРИ ЗАПУСКЕ
+        logger.info("🔧 Checking polls.json...")
+        polls_restored, polls_count = ensure_polls_file()
+        if polls_restored:
+            logger.info(f"✅ Polls status: {polls_count} polls ready for scheduling")
+        else:
+            logger.warning(f"⚠️ Polls status: starting with empty polls list")
+            logger.warning("💡 TIP: Use /restore_polls command to recover data from Google Sheets")
         
         # Добавляем обработчики команд ПЕРВЫМИ
         dp.add_handler(CommandHandler("start", start))
@@ -4210,7 +4185,7 @@ def main():
         
         # 🆕 Обработчик INLINE кнопок
         dp.add_handler(CallbackQueryHandler(handle_unsubscribe_button, pattern="^unsubscribe$"))
-        dp.add_handler(CallbackQueryHandler(handle_poll_results_button, pattern="^poll_results_"))
+        # Обработчик кнопки результатов удален по запросу пользователя
 
         # Добавляем обработчик ошибок
         dp.add_error_handler(error_handler)
