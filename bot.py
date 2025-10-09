@@ -3379,42 +3379,61 @@ def ensure_reminders_file():
     return False, 0
 
 def ensure_polls_file():
-    """🆕 Проверяет и восстанавливает polls.json при необходимости"""
+    """🆕 Проверяет и восстанавливает polls.json, всегда синхронизируется с Google Sheets"""
     try:
-        # Проверяем существует ли файл и не пустой ли он
+        # Проверяем существует ли локальный файл
         existing_polls = load_polls()
-        if existing_polls and len(existing_polls) > 0:
-            logger.info(f"✅ Found {len(existing_polls)} existing polls")
-            return True, len(existing_polls)  # Файл в порядке
+        local_count = len(existing_polls) if existing_polls else 0
+        logger.info(f"📋 Found {local_count} existing local polls")
     except Exception:
-        pass  # Файл отсутствует или поврежден
+        existing_polls = []
+        local_count = 0
+        logger.warning("⚠️ polls.json is missing or corrupted")
     
-    # Детальная диагностика доступности Google Sheets для голосований
-    logger.warning("⚠️ polls.json is missing, empty or corrupted. Attempting restore from Google Sheets...")
-    logger.info(f"🔍 Google Sheets polls restore check:")
+    # ВСЕГДА пытаемся синхронизироваться с Google Sheets при запуске
+    logger.info(f"🔄 Attempting to sync polls from Google Sheets on startup...")
     
     if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
-        logger.info("   ✅ Google Sheets available for polls restore")
+        logger.info("   ✅ Google Sheets available for polls sync")
         try:
             success, message = sheets_manager.restore_polls_from_sheets()
             if success:
-                restored_polls = load_polls()
-                restored_count = len(restored_polls)
-                logger.info(f"✅ Successfully restored {restored_count} polls from Google Sheets")
-                return True, restored_count
+                synced_polls = load_polls()
+                synced_count = len(synced_polls)
+                
+                if synced_count != local_count:
+                    logger.info(f"🔄 Startup sync: Updated polls {local_count} → {synced_count}")
+                    logger.info(f"✅ Successfully synced {synced_count} polls from Google Sheets")
+                else:
+                    logger.info(f"✅ Polls already in sync ({synced_count} items)")
+                
+                return True, synced_count
             else:
-                logger.error(f"❌ Failed to restore polls from Google Sheets: {message}")
+                logger.error(f"❌ Failed to sync polls from Google Sheets: {message}")
+                # Используем локальные данные если синхронизация не удалась
+                if local_count > 0:
+                    logger.info(f"📋 Using {local_count} local polls as fallback")
+                    return True, local_count
         except Exception as e:
-            logger.error(f"❌ Exception during polls restore: {e}")
+            logger.error(f"❌ Exception during polls sync: {e}")
+            # Используем локальные данные при ошибке
+            if local_count > 0:
+                logger.info(f"📋 Using {local_count} local polls as fallback")
+                return True, local_count
     else:
-        logger.warning("📵 Google Sheets not available for polls restoration")
+        logger.warning("📵 Google Sheets not available for polls sync")
         logger.warning("   This means:")
         logger.warning("   1. Check GOOGLE_SHEETS_ID environment variable")
         logger.warning("   2. Check GOOGLE_SHEETS_CREDENTIALS environment variable") 
         logger.warning("   3. Verify Google Sheets API access")
         logger.warning("   4. Ensure polls exist in Google Sheets with 'Active' status")
+        
+        # Используем локальные данные если Google Sheets недоступен
+        if local_count > 0:
+            logger.info(f"📋 Using {local_count} local polls (Google Sheets unavailable)")
+            return True, local_count
     
-    # Создаем пустой файл как fallback
+    # Создаем пустой файл только если нет ни локальных данных, ни Google Sheets
     logger.warning("📝 Creating empty polls.json as fallback")
     logger.warning("⚠️ ВНИМАНИЕ: Бот не сможет отправлять голосования без активных заданий!")
     logger.warning("   Для работы бота нужно:")
@@ -3517,6 +3536,83 @@ def auto_sync_reminders(context: CallbackContext):
             
     except Exception as e:
         logger.error(f"❌ Critical error in auto_sync_reminders: {e}")
+
+def auto_sync_polls(context: CallbackContext):
+    """🆕 Автоматическая синхронизация голосований с Google Sheets каждые 5 минут"""
+    try:
+        moscow_time = get_moscow_time().strftime("%H:%M MSK")
+        logger.info(f"🔄 Starting polls auto-sync at {moscow_time}")
+        
+        if not SHEETS_AVAILABLE or not sheets_manager or not sheets_manager.is_initialized:
+            logger.warning(f"📵 Google Sheets not available for polls sync at {moscow_time}")
+            return
+        
+        try:
+            # Проверяем есть ли локальные голосования
+            current_polls = load_polls()
+            current_count = len(current_polls)
+            
+            logger.info(f"📋 Current local polls: {current_count}")
+            
+            # Пытаемся получить голосования из Google Sheets
+            success, message = sheets_manager.restore_polls_from_sheets()
+            
+            if success:
+                synced_polls = load_polls()
+                synced_count = len(synced_polls)
+                
+                if synced_count != current_count:
+                    logger.info(f"🔄 Auto-sync: Updated polls {current_count} → {synced_count}")
+                    logger.info(f"🛡️ File completely overwritten - no duplicates possible")
+                    
+                    # Перепланируем все голосования
+                    reschedule_all_polls(context.dispatcher.job_queue)
+                    logger.info(f"✅ Polls rescheduled after auto-sync at {moscow_time}")
+                    
+                    # Проверяем активные задания после перепланирования
+                    active_jobs_after = check_active_jobs(context.dispatcher.job_queue)
+                    logger.info(f"📊 Active jobs after polls auto-sync: {active_jobs_after}")
+                    
+                    # Логируем в Google Sheets
+                    if sheets_manager.is_initialized:
+                        try:
+                            sheets_manager.log_operation(
+                                timestamp=moscow_time,
+                                action="AUTO_SYNC_POLLS",
+                                user_id="SYSTEM",
+                                username="AutoSync",
+                                chat_id=0,
+                                details=f"Auto-sync updated polls: {current_count} → {synced_count}, active jobs: {active_jobs_after}, no duplicates",
+                                reminder_id=""
+                            )
+                        except:
+                            pass
+                else:
+                    logger.info(f"✅ Auto-sync: Polls already in sync ({current_count} items) at {moscow_time}")
+                    logger.info(f"🛡️ No changes needed - all polls unique")
+            else:
+                logger.warning(f"⚠️ Auto-sync polls failed at {moscow_time}: {message}")
+                
+                # При неудаче автосинхронизации проверяем есть ли хотя бы локальные голосования
+                if current_count == 0:
+                    logger.warning("🚨 CRITICAL: No local polls AND auto-sync failed!")
+                    logger.warning("   This means NO polls will be sent until manual intervention")
+                    logger.warning("   Recommended action: use /restore_polls command")
+                
+        except Exception as e:
+            logger.error(f"❌ Error during polls auto-sync: {e}")
+            
+            # Проверяем критическое состояние
+            try:
+                current_polls = load_polls()
+                if len(current_polls) == 0:
+                    logger.error("🚨 CRITICAL ERROR: No polls available after auto-sync failure!")
+            except:
+                logger.error("🚨 CRITICAL ERROR: Cannot access polls file!")
+            
+    except Exception as e:
+        logger.error(f"❌ Critical error in auto_sync_polls: {e}")
+
 
 def check_active_jobs(job_queue):
     """🆕 Проверяет активные задания напоминаний и выводит статистику"""
@@ -4235,6 +4331,10 @@ def main():
         # 🆕 АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ НАПОМИНАНИЙ КАЖДЫЕ 5 МИНУТ
         updater.job_queue.run_repeating(auto_sync_reminders, interval=300, first=300)  # Каждые 5 минут, первый через 5 мин
         logger.info("🔄 Scheduled 5-minute reminders auto-sync")
+        
+        # 🆕 АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ГОЛОСОВАНИЙ КАЖДЫЕ 5 МИНУТ
+        updater.job_queue.run_repeating(auto_sync_polls, interval=300, first=300)  # Каждые 5 минут, первый через 5 мин
+        logger.info("🔄 Scheduled 5-minute polls auto-sync")
 
         # Health check server for Render free tier
         threading.Thread(target=start_health_server, daemon=True).start()
