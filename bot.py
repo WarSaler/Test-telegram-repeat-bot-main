@@ -4761,8 +4761,7 @@ def main():
                     drop_pending_updates=True, 
                     timeout=20,  # Увеличенный таймаут
                     read_latency=10,  # Увеличенная задержка чтения
-                    bootstrap_retries=3,  # Повторные попытки при ошибках
-                    clean=True  # Очистка состояния
+                    bootstrap_retries=3  # Повторные попытки при ошибках
                 )
                 logger.info("✅ Bot started successfully in polling mode")
                 break
