@@ -92,14 +92,41 @@ def format_moscow_time(dt):
 def error_handler(update: Update, context: CallbackContext):
     """
     Handle errors by logging them without crashing the bot.
+    Enhanced conflict handling with automatic restart mechanism.
     """
     if isinstance(context.error, Conflict):
-        logger.warning("⚠️ Conflict error: Multiple bot instances detected")
-        logger.warning("   This usually means:")
-        logger.warning("   1. Another bot instance is running")
-        logger.warning("   2. Previous deployment is still active")
-        logger.warning("   3. Development and production bots conflict")
-        logger.warning("   Continuing to run, conflicts should resolve automatically...")
+        logger.error("🚨 CRITICAL: Bot conflict detected - multiple instances running!")
+        logger.error("   This blocks ALL scheduled tasks (reminders, polls, etc.)")
+        logger.error("   Conflict details: {}".format(str(context.error)))
+        logger.error("   Attempting aggressive conflict resolution...")
+        
+        # Попытка агрессивного разрешения конфликта
+        try:
+            # Останавливаем текущий updater
+            if hasattr(context, 'dispatcher') and hasattr(context.dispatcher, 'updater'):
+                updater = context.dispatcher.updater
+                logger.warning("🔄 Stopping current updater to resolve conflict...")
+                updater.stop()
+                
+                # Пауза для завершения предыдущего экземпляра
+                time.sleep(5)
+                
+                # Принудительно удаляем webhook и перезапускаем polling
+                try:
+                    updater.bot.delete_webhook(drop_pending_updates=True)
+                    logger.info("✅ Webhook deleted during conflict resolution")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not delete webhook: {e}")
+                
+                # Перезапуск с увеличенным таймаутом
+                time.sleep(3)
+                updater.start_polling(drop_pending_updates=True, timeout=15, read_latency=10)
+                logger.info("🚀 Bot restarted after conflict resolution")
+                
+        except Exception as restart_error:
+            logger.error(f"❌ Failed to restart bot after conflict: {restart_error}")
+            logger.error("   Manual intervention may be required on Render platform")
+        
         return
     elif isinstance(context.error, BadRequest):
         logger.warning(f"⚠️ Bad request: {context.error}")
@@ -2664,8 +2691,27 @@ def send_poll(context: CallbackContext):
     """
     Отправляет голосование всем подписанным чатам.
     """
+    # 🚨 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ НАЧАЛА ВЫПОЛНЕНИЯ
+    moscow_time_start = get_moscow_time().strftime("%Y-%m-%d %H:%M:%S MSK")
+    utc_time_start = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    logger.info(f"🎯 POLL EXECUTION STARTED at {moscow_time_start} ({utc_time_start})")
+    logger.info(f"📋 Job context: {context.job.context if context.job else 'NO JOB CONTEXT'}")
+    
     try:
         poll = context.job.context
+        
+        # 🔍 ДЕТАЛЬНАЯ ПРОВЕРКА КОНТЕКСТА ГОЛОСОВАНИЯ
+        if not poll:
+            logger.error(f"❌ CRITICAL: No poll context found in job!")
+            return
+        
+        poll_id = poll.get('id', 'UNKNOWN')
+        poll_type = poll.get('type', 'UNKNOWN')
+        poll_question = poll.get('question', 'NO QUESTION')[:50]
+        
+        logger.info(f"📊 Poll details: ID={poll_id}, Type={poll_type}, Question='{poll_question}...'")
+        logger.info(f"🔧 Full poll context: {poll}")
         
         # Пытаемся загрузить чаты с автовосстановлением
         try:
@@ -4395,6 +4441,74 @@ def handle_unsubscribe_button(update: Update, context: CallbackContext):
 
 # Функция handle_poll_results_button удалена по запросу пользователя
 
+def monitor_scheduler_health(context: CallbackContext):
+    """
+    Мониторинг здоровья планировщика - проверяет активные задачи каждые 10 минут
+    и пытается восстановить голосования из Google Sheets при их отсутствии
+    """
+    try:
+        moscow_time = get_moscow_time().strftime("%Y-%m-%d %H:%M:%S MSK")
+        logger.info(f"🔍 Scheduler health check started at {moscow_time}")
+        
+        # Проверяем активные задачи
+        job_queue = context.job_queue
+        active_jobs = check_active_jobs(job_queue)
+        
+        reminder_jobs = active_jobs.get('reminder_jobs', 0)
+        poll_jobs = active_jobs.get('poll_jobs', 0)
+        
+        logger.info(f"📊 Current active jobs: {reminder_jobs} reminders, {poll_jobs} polls")
+        
+        # Если нет активных задач голосований, пытаемся восстановить
+        if poll_jobs == 0:
+            logger.warning(f"⚠️ No active poll jobs detected! Attempting emergency restore...")
+            
+            # Пытаемся восстановить из Google Sheets
+            if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
+                try:
+                    logger.info(f"🔧 Attempting emergency poll restore from Google Sheets...")
+                    
+                    # Загружаем активные голосования из Google Sheets
+                    active_polls = sheets_manager.get_active_polls()
+                    
+                    if active_polls:
+                        logger.info(f"📊 Found {len(active_polls)} active polls in Google Sheets")
+                        
+                        # Сохраняем в локальный файл
+                        save_polls(active_polls)
+                        
+                        # Перепланируем все голосования
+                        reschedule_all_polls(job_queue)
+                        
+                        # Проверяем результат
+                        updated_jobs = check_active_jobs(job_queue)
+                        new_poll_jobs = updated_jobs.get('poll_jobs', 0)
+                        
+                        logger.info(f"✅ Emergency restore completed: {new_poll_jobs} poll jobs scheduled")
+                        
+                        # Логируем в Google Sheets
+                        sheets_manager.log_poll_action(
+                            "EMERGENCY_RESTORE", 
+                            "SYSTEM", 
+                            "HealthMonitor", 
+                            0, 
+                            f"Emergency restore: {new_poll_jobs} polls restored from Google Sheets",
+                            "HEALTH_CHECK"
+                        )
+                        
+                    else:
+                        logger.info(f"📭 No active polls found in Google Sheets")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Emergency poll restore failed: {e}")
+            else:
+                logger.warning(f"📵 Google Sheets not available for emergency restore")
+        else:
+            logger.info(f"✅ Scheduler health check passed: {poll_jobs} poll jobs active")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in scheduler health monitor: {e}")
+
 def main():
     try:
         global BOT_START_TIME
@@ -4599,6 +4713,13 @@ def main():
         # Добавляем ping каждые 5 минут для предотвращения засыпания на Render
         updater.job_queue.run_repeating(ping_self, interval=300, first=30)
         
+        # 🚨 КРИТИЧЕСКИ ВАЖНЫЙ МОНИТОРИНГ АКТИВНОСТИ ПЛАНИРОВЩИКА
+        # Запускаем мониторинг здоровья планировщика каждые 10 минут
+        updater.job_queue.run_repeating(monitor_scheduler_health, interval=600, first=60)
+        logger.info("🔍 Scheduler health monitoring enabled (every 10 minutes)")
+        
+        # Мониторинг здоровья планировщика уже запущен выше
+        
         # ✅ АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ ПОДПИСОК КАЖДЫЕ 5 МИНУТ
         updater.job_queue.run_repeating(auto_sync_subscribed_chats, interval=300, first=300)  # Каждые 5 минут, первый через 5 мин
         logger.info("🔄 Scheduled 5-minute subscribed chats sync")
@@ -4614,18 +4735,52 @@ def main():
         # Health check server for Render free tier
         threading.Thread(target=start_health_server, daemon=True).start()
         
-        # Улучшенная обработка конфликтов при запуске
-        logger.info("🚀 Starting bot with enhanced conflict handling...")
+        # 🚨 КРИТИЧЕСКИ ВАЖНАЯ ЗАЩИТА ОТ МНОЖЕСТВЕННЫХ ЭКЗЕМПЛЯРОВ
+        logger.info("🚀 Starting bot with AGGRESSIVE conflict prevention...")
         
-        # Always run in polling mode
-        try:
-            updater.bot.delete_webhook(drop_pending_updates=True)
-            
-            # Дополнительная пауза для разрешения конфликтов
-            time.sleep(2)
-            
-            updater.start_polling(drop_pending_updates=True, timeout=10, read_latency=5)
-            logger.info("✅ Bot started successfully in polling mode")
+        # Множественные попытки очистки webhook для предотвращения конфликтов
+        for attempt in range(3):
+            try:
+                result = updater.bot.delete_webhook(drop_pending_updates=True)
+                logger.info(f"✅ Webhook deletion attempt {attempt + 1}: {result}")
+                time.sleep(2)  # Пауза между попытками
+            except Exception as e:
+                logger.warning(f"⚠️ Webhook deletion attempt {attempt + 1} failed: {e}")
+                time.sleep(1)
+        
+        # Дополнительная пауза для полного завершения предыдущих экземпляров
+        logger.info("⏳ Waiting for previous bot instances to terminate...")
+        time.sleep(10)
+        
+        # Попытка запуска с расширенными параметрами для предотвращения конфликтов
+        max_start_attempts = 3
+        for start_attempt in range(max_start_attempts):
+            try:
+                logger.info(f"🚀 Bot start attempt {start_attempt + 1}/{max_start_attempts}")
+                updater.start_polling(
+                    drop_pending_updates=True, 
+                    timeout=20,  # Увеличенный таймаут
+                    read_latency=10,  # Увеличенная задержка чтения
+                    bootstrap_retries=3,  # Повторные попытки при ошибках
+                    clean=True  # Очистка состояния
+                )
+                logger.info("✅ Bot started successfully in polling mode")
+                break
+            except Conflict as conflict_error:
+                logger.error(f"🚨 Conflict on start attempt {start_attempt + 1}: {conflict_error}")
+                if start_attempt < max_start_attempts - 1:
+                    wait_time = (start_attempt + 1) * 15  # Увеличивающаяся задержка
+                    logger.warning(f"⏳ Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("❌ All start attempts failed due to conflicts!")
+                    raise
+            except Exception as e:
+                logger.error(f"❌ Start attempt {start_attempt + 1} failed: {e}")
+                if start_attempt < max_start_attempts - 1:
+                    time.sleep(5)
+                else:
+                    raise
             
             # Финальная проверка состояния через 30 секунд
             time.sleep(30)
