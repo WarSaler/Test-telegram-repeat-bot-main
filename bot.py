@@ -827,11 +827,11 @@ def list_polls(update: Update, context: CallbackContext):
                 if len(p.get('options', [])) > 2:
                     options_preview += "..."
                 
-                if p["type"] == "once":
+                if p["type"] == "once" or p["type"] == "one_time":
                     lines.append(f"{i}. [📅 Разово] {p['datetime']}\n❓ {safe_question}\n🔘 {options_preview}\n")
-                elif p["type"] == "daily":
+                elif p["type"] == "daily" or p["type"] == "daily_poll":
                     lines.append(f"{i}. [🔄 Ежедневно] {p['time']}\n❓ {safe_question}\n🔘 {options_preview}\n")
-                elif p["type"] == "weekly":
+                elif p["type"] == "weekly" or p["type"] == "weekly_poll":
                     lines.append(f"{i}. [📆 Еженедельно] {p['day'].title()} {p['time']}\n❓ {safe_question}\n🔘 {options_preview}\n")
             except Exception as e:
                 logger.error(f"Error formatting poll {i}: {e}")
@@ -2535,7 +2535,7 @@ def send_poll(context: CallbackContext):
                     logger.error(f"❌ Error logging 'no recipients' to Google Sheets: {e}")
             
             # 🚮 АВТОМАТИЧЕСКОЕ УДАЛЕНИЕ РАЗОВЫХ ГОЛОСОВАНИЙ БЕЗ ПОЛУЧАТЕЛЕЙ
-            if poll.get("type") == "once":
+            if poll.get("type") == "once" or poll.get("type") == "one_time":
                 moscow_sent_time = get_moscow_time().strftime("%Y-%m-%d %H:%M:%S")
                 
                 # Обновляем данные голосования перед удалением
@@ -2707,7 +2707,7 @@ def send_poll(context: CallbackContext):
                 logger.error(f"❌ Error updating poll delivery info in Google Sheets: {e}")
         
         # 🗑️ УДАЛЯЕМ РАЗОВЫЕ ГОЛОСОВАНИЯ ПОСЛЕ ОТПРАВКИ
-        if poll.get("type") == "once":
+        if poll.get("type") == "once" or poll.get("type") == "one_time":
             polls = load_polls()
             polls = [p for p in polls if p.get("id") != poll.get("id")]
             save_polls(polls)
