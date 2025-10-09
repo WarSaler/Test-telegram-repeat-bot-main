@@ -4782,46 +4782,37 @@ def main():
                 else:
                     raise
             
-            # Финальная проверка состояния через 30 секунд
-            time.sleep(30)
-            final_reminder_jobs, final_poll_jobs = check_active_jobs(updater.job_queue)
-            logger.info(f"🔍 Final status check: {final_reminder_jobs} reminder jobs active")
-            logger.info(f"🔍 Final status check: {final_poll_jobs} poll jobs active")
-            
-            # Проверяем подписанные чаты
-            try:
-                with open("subscribed_chats.json", "r") as f:
-                    final_chats = json.load(f)
-                    logger.info(f"📱 Final chats check: {len(final_chats)} subscribed chats")
-            except:
-                logger.warning("⚠️ Final chats check: subscribed_chats.json not accessible")
-            
-            # Проверяем напоминания  
-            try:
-                final_reminders = load_reminders()
-                logger.info(f"📋 Final reminders check: {len(final_reminders)} reminders loaded")
-            except:
-                logger.warning("⚠️ Final reminders check: reminders.json not accessible")
-            
-            # Проверяем голосования
-            try:
-                final_polls = load_polls()
-                logger.info(f"🗳️ Final polls check: {len(final_polls)} polls loaded")
-            except:
-                logger.warning("⚠️ Final polls check: polls.json not accessible")
-            
-            logger.info("🚀 Bot startup completed successfully!")
-            
-            updater.idle()
-            
-        except Exception as e:
-            logger.error(f"❌ Error starting bot polling: {e}")
-            # Fallback: попытка повторного запуска через 10 секунд
-            logger.info("🔄 Attempting fallback restart in 10 seconds...")
-            time.sleep(10)
-            updater.start_polling(drop_pending_updates=True)
-            logger.info("✅ Bot started successfully (fallback mode)")
-            updater.idle()
+        # Финальная проверка состояния через 30 секунд
+        time.sleep(30)
+        final_reminder_jobs, final_poll_jobs = check_active_jobs(updater.job_queue)
+        logger.info(f"🔍 Final status check: {final_reminder_jobs} reminder jobs active")
+        logger.info(f"🔍 Final status check: {final_poll_jobs} poll jobs active")
+        
+        # Проверяем подписанные чаты
+        try:
+            with open("subscribed_chats.json", "r") as f:
+                final_chats = json.load(f)
+                logger.info(f"📱 Final chats check: {len(final_chats)} subscribed chats")
+        except:
+            logger.warning("⚠️ Final chats check: subscribed_chats.json not accessible")
+        
+        # Проверяем напоминания  
+        try:
+            final_reminders = load_reminders()
+            logger.info(f"📋 Final reminders check: {len(final_reminders)} reminders loaded")
+        except:
+            logger.warning("⚠️ Final reminders check: reminders.json not accessible")
+        
+        # Проверяем голосования
+        try:
+            final_polls = load_polls()
+            logger.info(f"🗳️ Final polls check: {len(final_polls)} polls loaded")
+        except:
+            logger.warning("⚠️ Final polls check: polls.json not accessible")
+        
+        logger.info("🚀 Bot startup completed successfully!")
+        
+        updater.idle()
         
     except Exception as e:
         logger.error(f"Critical error in main: {e}")
