@@ -3178,9 +3178,16 @@ def schedule_poll(job_queue, poll):
             moscow_dt = MOSCOW_TZ.localize(moscow_dt)
             utc_dt = moscow_dt.astimezone(pytz.UTC).replace(tzinfo=None)
             
-            if moscow_dt > get_moscow_time():  # Планируем только будущие голосования
+            current_moscow_time = get_moscow_time()
+            if moscow_dt > current_moscow_time:  # Планируем будущие голосования
                 job_queue.run_once(send_poll, utc_dt, context=poll, name=f"poll_{poll.get('id')}")
                 logger.info(f"Scheduled one-time poll {poll.get('id')} for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}")
+            elif moscow_dt <= current_moscow_time and (current_moscow_time - moscow_dt).total_seconds() <= 3600:  # Пропущенные голосования (в течение часа)
+                # Отправляем пропущенное голосование немедленно
+                logger.warning(f"⚠️ Missed poll {poll.get('id')} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}, sending immediately")
+                job_queue.run_once(send_poll, datetime.utcnow() + timedelta(seconds=5), context=poll, name=f"poll_{poll.get('id')}_missed")
+            else:
+                logger.info(f"Skipping old poll {poll.get('id')} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')} (too old)")
                 
         elif poll["type"] == "daily":
             h, m = map(int, poll["time"].split(":"))
