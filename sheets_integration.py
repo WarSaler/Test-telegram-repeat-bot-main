@@ -1045,7 +1045,7 @@ class SheetsManager:
                     poll.get('type', ''),
                     poll.get('chat_id', ''),
                     poll.get('chat_name', ''),
-                    'Active',
+                    poll.get('status', 'Active'),  # Сохраняем реальный статус из локального файла
                     poll.get('created_at', ''),
                     poll.get('username', ''),
                     poll.get('last_sent', ''),
@@ -1119,15 +1119,11 @@ class SheetsManager:
             
             for record in records:
                 try:
-                    # Проверяем статус - принимаем 'Active', 'active' или пустой статус как активный
+                    # Строгая проверка статуса - принимаем только 'Active' (с учетом регистра)
                     status = record.get('Status', '').strip()
-                    if status and status.lower() not in ['active', 'активный']:
-                        logger.debug(f"Skipping poll {record.get('ID')} with status: {status}")
+                    if status != 'Active':
+                        logger.debug(f"Skipping poll {record.get('ID')} with status: '{status}' (only 'Active' polls are processed)")
                         continue
-                    
-                    # Если статус пустой или неизвестный, считаем голосование активным
-                    if not status or status.lower() == 'unknown':
-                        logger.info(f"Poll {record.get('ID')} has empty/unknown status, treating as active")
                     
                     # Проверяем уникальность ID
                     poll_id = str(record.get('ID', '')).strip()
@@ -1216,8 +1212,10 @@ class SheetsManager:
                         logger.warning(f"Invalid poll data: ID={restored_poll.get('id')}, Question={restored_poll.get('question')}, Options={restored_poll.get('options')}")
                         continue
                     
+                    # Добавляем статус 'active' для локального файла
+                    restored_poll['status'] = 'active'
                     active_polls.append(restored_poll)
-                    logger.debug(f"Restored poll: {restored_poll['id']} ({restored_poll['type']})")
+                    logger.debug(f"Restored poll: {restored_poll['id']} ({restored_poll['type']}) with status 'active'")
                     
                 except Exception as e:
                     logger.error(f"Error processing poll record: {e}")

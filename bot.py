@@ -3264,13 +3264,13 @@ def schedule_all_polls(job_queue):
         poll_status = poll.get('status', 'unknown')
         logger.info(f"🔍 Poll #{poll_id}: status='{poll_status}'")
         
-        # Принимаем как активные: 'active', пустой статус или 'unknown'
-        if poll.get("status") == "active" or not poll.get("status") or poll.get("status") == "unknown":
+        # Строгая проверка статуса - принимаем только 'active'
+        if poll.get("status") == "active":
             logger.info(f"✅ Poll #{poll_id} is active (status: '{poll_status}'), calling schedule_poll")
             active_polls.append(poll)
             schedule_poll(job_queue, poll)
         else:
-            logger.info(f"❌ Poll #{poll_id} is not active (status: '{poll_status}')")
+            logger.info(f"❌ Poll #{poll_id} is not active (status: '{poll_status}') - only 'active' polls are scheduled")
     
     logger.info(f"📊 schedule_all_polls: Processed {len(active_polls)} active polls out of {len(polls)} total")
 
