@@ -1119,11 +1119,15 @@ class SheetsManager:
             
             for record in records:
                 try:
-                    # Проверяем статус
+                    # Проверяем статус - принимаем 'Active', 'active' или пустой статус как активный
                     status = record.get('Status', '').strip()
-                    if status.lower() != 'active':
+                    if status and status.lower() not in ['active', 'активный']:
                         logger.debug(f"Skipping poll {record.get('ID')} with status: {status}")
                         continue
+                    
+                    # Если статус пустой или неизвестный, считаем голосование активным
+                    if not status or status.lower() == 'unknown':
+                        logger.info(f"Poll {record.get('ID')} has empty/unknown status, treating as active")
                     
                     # Проверяем уникальность ID
                     poll_id = str(record.get('ID', '')).strip()
