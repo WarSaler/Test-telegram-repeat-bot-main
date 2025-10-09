@@ -6,5 +6,20 @@
     "type": "one_time",
     "datetime": "2025-01-10 14:10",
     "status": "active"
+  },
+  {
+    "id": 14,
+    "question": "Тестовое голосование на будущее время",
+    "options": ["Да", "Нет", "Не знаю"],
+    "type": "one_time",
+    "datetime": "2025-10-09 17:00",
+    "status": "active",
+    "chat_id": -1001234567890,
+    "chat_name": "Test Chat",
+    "created_at": "09.10.2025 16:35:00",
+    "username": "TestUser",
+    "last_sent": null,
+    "days_of_week": null,
+    "allow_multiple_answers": true
   }
 ]
