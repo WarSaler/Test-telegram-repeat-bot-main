@@ -549,7 +549,7 @@ class SheetsManager:
                 try:
                     # Проверяем статус
                     status = record.get('Status', '').strip()
-                    if status.lower() != 'active':
+                    if status != 'Active':
                         logger.debug(f"Skipping reminder {record.get('ID')} with status: {status}")
                         continue
                     
@@ -645,7 +645,7 @@ class SheetsManager:
             
             # 🆕 Дополнительная статистика восстановления
             total_processed = len(records)
-            duplicates_skipped = total_processed - len(seen_ids) - len([r for r in records if r.get('Status', '').lower() != 'active'])
+            duplicates_skipped = total_processed - len(seen_ids) - len([r for r in records if r.get('Status', '').strip() != 'Active'])
             invalid_skipped = len(seen_ids) - len(active_reminders)
             
             logger.info(f"📊 Restore statistics:")
@@ -1212,10 +1212,10 @@ class SheetsManager:
                         logger.warning(f"Invalid poll data: ID={restored_poll.get('id')}, Question={restored_poll.get('question')}, Options={restored_poll.get('options')}")
                         continue
                     
-                    # Добавляем статус 'active' для локального файла
-                    restored_poll['status'] = 'active'
+                    # Добавляем статус 'Active' для локального файла
+        restored_poll['status'] = 'Active'
                     active_polls.append(restored_poll)
-                    logger.debug(f"Restored poll: {restored_poll['id']} ({restored_poll['type']}) with status 'active'")
+                    logger.debug(f"Restored poll: {restored_poll['id']} ({restored_poll['type']}) with status 'Active'")
                     
                 except Exception as e:
                     logger.error(f"Error processing poll record: {e}")
@@ -1227,7 +1227,7 @@ class SheetsManager:
             
             # Дополнительная статистика восстановления
             total_processed = len(records)
-            duplicates_skipped = total_processed - len(seen_ids) - len([r for r in records if r.get('Status', '').lower() != 'active'])
+            duplicates_skipped = total_processed - len(seen_ids) - len([r for r in records if r.get('Status', '').strip() != 'Active'])
             invalid_skipped = len(seen_ids) - len(active_polls)
             
             logger.info(f"📊 Poll restore statistics:")

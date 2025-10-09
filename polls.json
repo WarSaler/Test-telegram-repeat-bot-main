@@ -5,7 +5,7 @@
     "options": ["Вариант 1", "Вариант 2", "Вариант 3"],
     "type": "one_time",
     "datetime": "2025-01-10 14:10",
-    "status": "active"
+    "status": "Active"
   },
   {
     "id": 14,
@@ -13,7 +13,7 @@
     "options": ["Да", "Нет", "Не знаю"],
     "type": "one_time",
     "datetime": "2025-10-09 17:00",
-    "status": "active",
+    "status": "Active",
     "chat_id": -1001234567890,
     "chat_name": "Test Chat",
     "created_at": "09.10.2025 16:35:00",

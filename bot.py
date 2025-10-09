@@ -2051,7 +2051,7 @@ def receive_poll_options(update: Update, context: CallbackContext):
             "type": "once",
             "chat_id": update.effective_chat.id,
             "chat_name": update.effective_chat.title or update.effective_user.first_name or "Unknown",
-            "status": "active",
+            "status": "Active",
             "created_at": get_moscow_time().strftime("%d.%m.%Y %H:%M:%S"),
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
@@ -2224,7 +2224,7 @@ def receive_daily_poll_options(update: Update, context: CallbackContext):
             "type": "daily",
             "chat_id": update.effective_chat.id,
             "chat_name": update.effective_chat.title or update.effective_user.first_name or "Unknown",
-            "status": "active",
+            "status": "Active",
             "created_at": get_moscow_time().strftime("%d.%m.%Y %H:%M:%S"),
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
@@ -2431,7 +2431,7 @@ def receive_weekly_poll_options(update: Update, context: CallbackContext):
             "type": "weekly",
             "chat_id": update.effective_chat.id,
             "chat_name": update.effective_chat.title or update.effective_user.first_name or "Unknown",
-            "status": "active",
+            "status": "Active",
             "created_at": get_moscow_time().strftime("%d.%m.%Y %H:%M:%S"),
             "username": update.effective_user.username or "Unknown",
             "last_sent": None,
@@ -3264,13 +3264,13 @@ def schedule_all_polls(job_queue):
         poll_status = poll.get('status', 'unknown')
         logger.info(f"🔍 Poll #{poll_id}: status='{poll_status}'")
         
-        # Строгая проверка статуса - принимаем только 'active'
-        if poll.get("status") == "active":
+        # Строгая проверка статуса - принимаем только 'Active'
+        if poll.get("status") == "Active":
             logger.info(f"✅ Poll #{poll_id} is active (status: '{poll_status}'), calling schedule_poll")
             active_polls.append(poll)
             schedule_poll(job_queue, poll)
         else:
-            logger.info(f"❌ Poll #{poll_id} is not active (status: '{poll_status}') - only 'active' polls are scheduled")
+            logger.info(f"❌ Poll #{poll_id} is not active (status: '{poll_status}') - only 'Active' polls are scheduled")
     
     logger.info(f"📊 schedule_all_polls: Processed {len(active_polls)} active polls out of {len(polls)} total")
 
