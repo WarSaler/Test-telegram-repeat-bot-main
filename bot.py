@@ -3615,12 +3615,14 @@ def auto_sync_polls(context: CallbackContext):
 
 
 def check_active_jobs(job_queue):
-    """🆕 Проверяет активные задания напоминаний и выводит статистику"""
+    """🆕 Проверяет активные задания напоминаний и голосований и выводит статистику"""
     try:
         current_jobs = job_queue.jobs()
         reminder_jobs = [job for job in current_jobs if hasattr(job, 'name') and job.name and job.name.startswith('reminder_')]
+        poll_jobs = [job for job in current_jobs if hasattr(job, 'name') and job.name and job.name.startswith('poll_')]
         
         logger.info(f"📊 Active reminder jobs: {len(reminder_jobs)}")
+        logger.info(f"📊 Active poll jobs: {len(poll_jobs)}")
         
         if len(reminder_jobs) > 0:
             logger.info("📋 Active reminder jobs list:")
@@ -3656,11 +3658,44 @@ def check_active_jobs(job_queue):
             logger.warning("   2. All reminders are in the past")
             logger.warning("   3. Scheduling failed")
             
-        return len(reminder_jobs)
+        if len(poll_jobs) > 0:
+            logger.info("📋 Active poll jobs list:")
+            for job in poll_jobs:
+                try:
+                        # Универсальная проверка времени следующего выполнения
+                        next_run = None
+                        if hasattr(job, 'next_run_time') and job.next_run_time:
+                            next_run = job.next_run_time
+                        elif hasattr(job, 'next_run') and job.next_run:
+                            next_run = job.next_run
+                        elif hasattr(job, 'trigger'):
+                            try:
+                                from datetime import datetime
+                                import pytz
+                                utc_now = datetime.now(pytz.UTC)
+                                next_run = job.trigger.get_next_fire_time(None, utc_now)
+                            except: pass
+                        
+                        if next_run:
+                            next_run_moscow = utc_to_moscow_time(next_run)
+                            logger.info(f"   • {job.name}: next run at {next_run_moscow}")
+                        else:
+                            logger.info(f"   • {job.name}: scheduled (time info unavailable)")
+                except Exception as attr_error:
+                    logger.info(f"   • {job.name}: scheduled (next_run attribute error)")
+        else:
+            logger.warning("⚠️ NO ACTIVE POLL JOBS FOUND!")
+            logger.warning("   This means polls will not be sent!")
+            logger.warning("   Possible reasons:")
+            logger.warning("   1. polls.json is empty")
+            logger.warning("   2. All polls are in the past")
+            logger.warning("   3. Scheduling failed")
+            
+        return len(reminder_jobs), len(poll_jobs)
         
     except Exception as e:
         logger.error(f"❌ Error checking active jobs: {e}")
-        return 0
+        return 0, 0
 
 def emergency_restore_subscribed_chats(context: CallbackContext):
     """Экстренное восстановление при критической ошибке отправки"""
@@ -4302,8 +4337,8 @@ def main():
         schedule_all_polls(updater.job_queue)
         
         # 🆕 ПРОВЕРЯЕМ АКТИВНЫЕ ЗАДАНИЯ ПОСЛЕ ПЛАНИРОВАНИЯ
-        active_jobs_count = check_active_jobs(updater.job_queue)
-        if active_jobs_count == 0:
+        active_reminder_jobs, active_poll_jobs = check_active_jobs(updater.job_queue)
+        if active_reminder_jobs == 0:
             logger.warning("⚠️ CRITICAL: No active reminder jobs scheduled!")
             logger.warning("   Attempting immediate reminders restore...")
             
@@ -4314,12 +4349,17 @@ def main():
                     if success:
                         logger.info("✅ Emergency restore successful, rescheduling...")
                         reschedule_all_reminders(updater.job_queue)
-                        final_jobs_count = check_active_jobs(updater.job_queue)
-                        logger.info(f"🔄 After emergency restore: {final_jobs_count} active jobs")
+                        final_reminder_jobs, final_poll_jobs = check_active_jobs(updater.job_queue)
+                        logger.info(f"🔄 After emergency restore: {final_reminder_jobs} reminder jobs, {final_poll_jobs} poll jobs")
                     else:
                         logger.error(f"❌ Emergency restore failed: {message}")
                 except Exception as e:
                     logger.error(f"❌ Exception during emergency restore: {e}")
+        
+        if active_poll_jobs == 0:
+            logger.warning("⚠️ CRITICAL: No active poll jobs scheduled!")
+            logger.warning("   This means polls will not be sent!")
+            logger.warning("   Check if polls.json contains valid future polls")
         
         # Добавляем ping каждые 5 минут для предотвращения засыпания на Render
         updater.job_queue.run_repeating(ping_self, interval=300, first=30)
@@ -4354,8 +4394,9 @@ def main():
             
             # Финальная проверка состояния через 30 секунд
             time.sleep(30)
-            final_check_jobs = check_active_jobs(updater.job_queue)
-            logger.info(f"🔍 Final status check: {final_check_jobs} reminder jobs active")
+            final_reminder_jobs, final_poll_jobs = check_active_jobs(updater.job_queue)
+            logger.info(f"🔍 Final status check: {final_reminder_jobs} reminder jobs active")
+            logger.info(f"🔍 Final status check: {final_poll_jobs} poll jobs active")
             
             # Проверяем подписанные чаты
             try:
@@ -4371,6 +4412,13 @@ def main():
                 logger.info(f"📋 Final reminders check: {len(final_reminders)} reminders loaded")
             except:
                 logger.warning("⚠️ Final reminders check: reminders.json not accessible")
+            
+            # Проверяем голосования
+            try:
+                final_polls = load_polls()
+                logger.info(f"🗳️ Final polls check: {len(final_polls)} polls loaded")
+            except:
+                logger.warning("⚠️ Final polls check: polls.json not accessible")
             
             logger.info("🚀 Bot startup completed successfully!")
             
