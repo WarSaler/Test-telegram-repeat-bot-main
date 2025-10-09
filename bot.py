@@ -3166,47 +3166,72 @@ def schedule_poll(job_queue, poll):
     Добавляет задание в JobQueue для данного голосования с учетом московского времени.
     """
     try:
+        poll_id = poll.get('id', 'unknown')
+        poll_type = poll.get('type', 'unknown')
+        logger.info(f"🔄 Attempting to schedule poll #{poll_id} (type: {poll_type})")
+        
         # Сначала удаляем существующее задание с таким же ID, если есть
         current_jobs = job_queue.jobs()
+        removed_jobs = 0
         for job in current_jobs:
-            if hasattr(job, 'name') and job.name == f"poll_{poll.get('id')}":
+            if hasattr(job, 'name') and job.name == f"poll_{poll_id}":
                 job.schedule_removal()
+                removed_jobs += 1
+        
+        if removed_jobs > 0:
+            logger.info(f"🗑️ Removed {removed_jobs} existing job(s) for poll #{poll_id}")
         
         if poll["type"] == "once" or poll["type"] == "one_time":
             # Парсим как московское время и конвертируем в UTC для планировщика
-            moscow_dt = datetime.strptime(poll["datetime"], "%Y-%m-%d %H:%M")
+            datetime_str = poll.get("datetime", "")
+            logger.info(f"📅 Processing one-time poll #{poll_id} with datetime: {datetime_str}")
+            
+            moscow_dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
             moscow_dt = MOSCOW_TZ.localize(moscow_dt)
             utc_dt = moscow_dt.astimezone(pytz.UTC).replace(tzinfo=None)
             
             current_moscow_time = get_moscow_time()
+            time_diff = (moscow_dt - current_moscow_time).total_seconds()
+            
+            logger.info(f"⏰ Poll #{poll_id} scheduled for: {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}")
+            logger.info(f"⏰ Current Moscow time: {current_moscow_time.strftime('%Y-%m-%d %H:%M MSK')}")
+            logger.info(f"⏰ Time difference: {time_diff:.0f} seconds ({time_diff/60:.1f} minutes)")
+            
             if moscow_dt > current_moscow_time:  # Планируем будущие голосования
-                job_queue.run_once(send_poll, utc_dt, context=poll, name=f"poll_{poll.get('id')}")
-                logger.info(f"Scheduled one-time poll {poll.get('id')} for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}")
-            elif moscow_dt <= current_moscow_time and (current_moscow_time - moscow_dt).total_seconds() <= 3600:  # Пропущенные голосования (в течение часа)
+                job_queue.run_once(send_poll, utc_dt, context=poll, name=f"poll_{poll_id}")
+                logger.info(f"✅ Scheduled one-time poll #{poll_id} for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}")
+            elif moscow_dt <= current_moscow_time and time_diff >= -3600:  # Пропущенные голосования (в течение часа)
                 # Отправляем пропущенное голосование немедленно
-                logger.warning(f"⚠️ Missed poll {poll.get('id')} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}, sending immediately")
-                job_queue.run_once(send_poll, datetime.utcnow() + timedelta(seconds=5), context=poll, name=f"poll_{poll.get('id')}_missed")
+                logger.warning(f"⚠️ Missed poll #{poll_id} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')}, sending immediately")
+                job_queue.run_once(send_poll, datetime.utcnow() + timedelta(seconds=5), context=poll, name=f"poll_{poll_id}_missed")
             else:
-                logger.info(f"Skipping old poll {poll.get('id')} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')} (too old)")
+                logger.warning(f"❌ Skipping old poll #{poll_id} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')} (too old: {-time_diff/3600:.1f} hours ago)")
                 
         elif poll["type"] == "daily" or poll["type"] == "daily_poll":
-            h, m = map(int, poll["time"].split(":"))
+            time_str = poll.get("time", "")
+            logger.info(f"📅 Processing daily poll #{poll_id} with time: {time_str}")
+            
+            h, m = map(int, time_str.split(":"))
             # Создаем время в московском часовом поясе, затем конвертируем в UTC
             moscow_time = dt_time(hour=h, minute=m)
             # Для ежедневных голосований нужно учесть смещение UTC
             utc_hour = (h - 3) % 24  # MSK = UTC+3
             utc_time = dt_time(hour=utc_hour, minute=m)
             
-            job_queue.run_daily(send_poll, utc_time, context=poll, name=f"poll_{poll.get('id')}")
-            logger.info(f"Scheduled daily poll {poll.get('id')} for {h:02d}:{m:02d} MSK (UTC: {utc_hour:02d}:{m:02d})")
+            job_queue.run_daily(send_poll, utc_time, context=poll, name=f"poll_{poll_id}")
+            logger.info(f"✅ Scheduled daily poll #{poll_id} for {h:02d}:{m:02d} MSK (UTC: {utc_hour:02d}:{m:02d})")
             
         elif poll["type"] == "weekly" or poll["type"] == "weekly_poll":
             days_map = {
                 "понедельник": 0, "вторник": 1, "среда": 2,
                 "четверг": 3, "пятница": 4, "суббота": 5, "воскресенье": 6
             }
-            weekday = days_map[poll["day"].lower()]
-            h, m = map(int, poll["time"].split(":"))
+            day_str = poll.get("day", "")
+            time_str = poll.get("time", "")
+            logger.info(f"📅 Processing weekly poll #{poll_id} for {day_str} at {time_str}")
+            
+            weekday = days_map[day_str.lower()]
+            h, m = map(int, time_str.split(":"))
             
             # Конвертируем московское время в UTC
             utc_hour = (h - 3) % 24  # MSK = UTC+3
@@ -3217,9 +3242,11 @@ def schedule_poll(job_queue, poll):
                 utc_time,
                 context=poll,
                 days=(weekday,),
-                name=f"poll_{poll.get('id')}"
+                name=f"poll_{poll_id}"
             )
-            logger.info(f"Scheduled weekly poll {poll.get('id')} for {poll['day']} {h:02d}:{m:02d} MSK")
+            logger.info(f"✅ Scheduled weekly poll #{poll_id} for {day_str} {h:02d}:{m:02d} MSK")
+        else:
+            logger.error(f"❌ Unknown poll type '{poll_type}' for poll #{poll_id}")
             
     except Exception as e:
         logger.error(f"Error scheduling poll {poll.get('id', 'unknown')}: {e}")
