@@ -3256,10 +3256,22 @@ def schedule_all_polls(job_queue):
     Планирует все активные голосования из файла.
     """
     polls = load_polls()
+    logger.info(f"🔍 schedule_all_polls: Loaded {len(polls)} polls from file")
+    
+    active_polls = []
     for poll in polls:
+        poll_id = poll.get('id', 'unknown')
+        poll_status = poll.get('status', 'unknown')
+        logger.info(f"🔍 Poll #{poll_id}: status='{poll_status}'")
+        
         if poll.get("status") == "active":
+            logger.info(f"✅ Poll #{poll_id} is active, calling schedule_poll")
+            active_polls.append(poll)
             schedule_poll(job_queue, poll)
-    logger.info(f"Scheduled {len([p for p in polls if p.get('status') == 'active'])} active polls")
+        else:
+            logger.info(f"❌ Poll #{poll_id} is not active (status: '{poll_status}')")
+    
+    logger.info(f"📊 schedule_all_polls: Processed {len(active_polls)} active polls out of {len(polls)} total")
 
 def reschedule_all_polls(job_queue):
     """
