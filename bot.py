@@ -3172,7 +3172,7 @@ def schedule_poll(job_queue, poll):
             if hasattr(job, 'name') and job.name == f"poll_{poll.get('id')}":
                 job.schedule_removal()
         
-        if poll["type"] == "once":
+        if poll["type"] == "once" or poll["type"] == "one_time":
             # Парсим как московское время и конвертируем в UTC для планировщика
             moscow_dt = datetime.strptime(poll["datetime"], "%Y-%m-%d %H:%M")
             moscow_dt = MOSCOW_TZ.localize(moscow_dt)
@@ -3189,7 +3189,7 @@ def schedule_poll(job_queue, poll):
             else:
                 logger.info(f"Skipping old poll {poll.get('id')} scheduled for {moscow_dt.strftime('%Y-%m-%d %H:%M MSK')} (too old)")
                 
-        elif poll["type"] == "daily":
+        elif poll["type"] == "daily" or poll["type"] == "daily_poll":
             h, m = map(int, poll["time"].split(":"))
             # Создаем время в московском часовом поясе, затем конвертируем в UTC
             moscow_time = dt_time(hour=h, minute=m)
@@ -3200,7 +3200,7 @@ def schedule_poll(job_queue, poll):
             job_queue.run_daily(send_poll, utc_time, context=poll, name=f"poll_{poll.get('id')}")
             logger.info(f"Scheduled daily poll {poll.get('id')} for {h:02d}:{m:02d} MSK (UTC: {utc_hour:02d}:{m:02d})")
             
-        elif poll["type"] == "weekly":
+        elif poll["type"] == "weekly" or poll["type"] == "weekly_poll":
             days_map = {
                 "понедельник": 0, "вторник": 1, "среда": 2,
                 "четверг": 3, "пятница": 4, "суббота": 5, "воскресенье": 6
