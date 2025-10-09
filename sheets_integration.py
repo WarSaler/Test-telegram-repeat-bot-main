@@ -1213,7 +1213,7 @@ class SheetsManager:
                         continue
                     
                     # Добавляем статус 'Active' для локального файла
-        restored_poll['status'] = 'Active'
+                    restored_poll['status'] = 'Active'
                     active_polls.append(restored_poll)
                     logger.debug(f"Restored poll: {restored_poll['id']} ({restored_poll['type']}) with status 'Active'")
                     

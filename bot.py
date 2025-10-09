@@ -1456,6 +1456,183 @@ def restore_reminders(update: Update, context: CallbackContext):
         except:
             update.message.reply_text("❌ Критическая ошибка восстановления")
 
+def restore_polls(update: Update, context: CallbackContext):
+    """Восстановление активных голосований из Google Sheets"""
+    try:
+        # Проверяем доступность Google Sheets
+        if not SHEETS_AVAILABLE or not sheets_manager:
+            try:
+                update.message.reply_text(
+                    "❌ <b>Google Sheets недоступен</b>\n\n"
+                    "📵 Интеграция с Google Sheets не настроена.\n"
+                    "Обратитесь к администратору для настройки.",
+                    parse_mode=ParseMode.HTML
+                )
+            except:
+                update.message.reply_text("❌ Google Sheets недоступен")
+            return
+        
+        if not sheets_manager.is_initialized:
+            try:
+                update.message.reply_text(
+                    "❌ <b>Google Sheets не инициализирован</b>\n\n"
+                    "🔧 Проверьте переменные окружения:\n"
+                    "• GOOGLE_SHEETS_ID\n"
+                    "• GOOGLE_SHEETS_CREDENTIALS",
+                    parse_mode=ParseMode.HTML
+                )
+            except:
+                update.message.reply_text("❌ Google Sheets не инициализирован")
+            return
+        
+        # Отправляем сообщение о начале восстановления
+        try:
+            progress_message = update.message.reply_text(
+                "🔄 <b>Восстановление голосований...</b>\n\n"
+                "📊 Получение данных из Google Sheets...",
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            progress_message = update.message.reply_text("🔄 Восстановление голосований...")
+        
+        # Получаем информацию о пользователе для логирования
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name or "Unknown"
+        
+        # Логируем начало операции восстановления
+        if sheets_manager.is_initialized:
+            try:
+                moscow_time = get_moscow_time().strftime("%Y-%m-%d %H:%M:%S")
+                sheets_manager.log_operation(
+                    timestamp=moscow_time,
+                    action="RESTORE_POLLS_START",
+                    user_id=str(user_id),
+                    username=username,
+                    chat_id=chat_id,
+                    details="Manual restore polls command initiated",
+                    reminder_id=""
+                )
+            except Exception as e:
+                logger.error(f"Error logging restore polls start: {e}")
+        
+        # Обновляем сообщение о прогрессе
+        try:
+            context.bot.edit_message_text(
+                chat_id=progress_message.chat_id,
+                message_id=progress_message.message_id,
+                text="🔄 <b>Восстановление голосований...</b>\n\n"
+                     "📊 Восстановление голосований...",
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            pass
+        
+        # Восстанавливаем голосования
+        polls_success, polls_message = sheets_manager.restore_polls_from_sheets()
+        
+        if polls_success:
+            # Перепланируем все голосования
+            reschedule_all_polls(context.dispatcher.job_queue)
+            
+            # Получаем количество восстановленных голосований
+            try:
+                restored_polls = load_polls()
+                polls_count = len(restored_polls)
+                
+                # Подсчитываем голосования по типам
+                polls_once_count = sum(1 for p in restored_polls if p.get('type') == 'once')
+                polls_daily_count = sum(1 for p in restored_polls if p.get('type') == 'daily')
+                polls_weekly_count = sum(1 for p in restored_polls if p.get('type') == 'weekly')
+                
+                # Формируем итоговое сообщение
+                final_message = (
+                    f"✅ <b>Восстановление голосований завершено!</b>\n\n"
+                    f"📊 <b>Восстановлено голосований: {polls_count}</b>\n"
+                    f"📅 Разовых: {polls_once_count}\n"
+                    f"🔄 Ежедневных: {polls_daily_count}\n"
+                    f"📆 Еженедельных: {polls_weekly_count}\n\n"
+                    f"⏰ Все голосования перепланированы и активны!\n"
+                    f"<i>Команда: /list_polls для просмотра</i>"
+                )
+                
+                try:
+                    context.bot.edit_message_text(
+                        chat_id=progress_message.chat_id,
+                        message_id=progress_message.message_id,
+                        text=final_message,
+                        parse_mode=ParseMode.HTML
+                    )
+                except:
+                    # Fallback без HTML
+                    clean_message = (
+                        f"✅ Восстановление голосований завершено!\n\n"
+                        f"📊 Восстановлено голосований: {polls_count}\n"
+                        f"📅 Разовых: {polls_once_count}\n"
+                        f"🔄 Ежедневных: {polls_daily_count}\n"
+                        f"📆 Еженедельных: {polls_weekly_count}\n\n"
+                        f"⏰ Все голосования перепланированы и активны!\n\n"
+                        f"Используйте /list_polls для просмотра."
+                    )
+                    update.message.reply_text(clean_message)
+                
+                logger.info(f"✅ Successfully restored {polls_count} polls for user {username} (ID: {user_id})")
+                
+            except Exception as e:
+                logger.error(f"Error getting restored polls count: {e}")
+                try:
+                    context.bot.edit_message_text(
+                        chat_id=progress_message.chat_id,
+                        message_id=progress_message.message_id,
+                        text=f"✅ <b>Восстановление голосований завершено!</b>\n\n"
+                             f"📊 {polls_message}",
+                        parse_mode=ParseMode.HTML
+                    )
+                except:
+                    update.message.reply_text(f"✅ Восстановление голосований завершено!\n\n📊 {polls_message}")
+        
+        else:
+            # Ошибка восстановления голосований
+            try:
+                context.bot.edit_message_text(
+                    chat_id=progress_message.chat_id,
+                    message_id=progress_message.message_id,
+                    text=f"❌ <b>Ошибка восстановления голосований</b>\n\n"
+                         f"📊 {polls_message}\n\n"
+                         f"💡 Попробуйте позже или обратитесь к администратору.",
+                    parse_mode=ParseMode.HTML
+                )
+            except:
+                update.message.reply_text(f"❌ Ошибка восстановления голосований\n\n📊 {polls_message}")
+        
+        # Логируем завершение операции
+        if sheets_manager.is_initialized:
+            try:
+                moscow_time = get_moscow_time().strftime("%Y-%m-%d %H:%M:%S")
+                sheets_manager.log_operation(
+                    timestamp=moscow_time,
+                    action="RESTORE_POLLS_COMPLETE",
+                    user_id=str(user_id),
+                    username=username,
+                    chat_id=chat_id,
+                    details=f"Restore polls completed: {polls_message}",
+                    reminder_id=""
+                )
+            except Exception as e:
+                logger.error(f"Error logging restore polls complete: {e}")
+        
+    except Exception as e:
+        logger.error(f"Error in restore_polls: {e}")
+        try:
+            update.message.reply_text(
+                "❌ <b>Ошибка при восстановлении голосований</b>\n\n"
+                "Произошла ошибка при восстановлении голосований.\n"
+                "Попробуйте позже или обратитесь к администратору.",
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            update.message.reply_text("❌ Ошибка при восстановлении голосований")
+
 # --- Следующее напоминание ---
 def next_notification(update: Update, context: CallbackContext):
     try:
@@ -4357,6 +4534,7 @@ def main():
         dp.add_handler(CommandHandler("clear_reminders", clear_reminders))
         dp.add_handler(CommandHandler("clear_polls", clear_polls))
         dp.add_handler(CommandHandler("restore", restore_reminders))
+        dp.add_handler(CommandHandler("restore_polls", restore_polls))
         dp.add_handler(CommandHandler("next", next_notification))
         dp.add_handler(CommandHandler("status", bot_status))
         dp.add_handler(CommandHandler("unsubscribe", unsubscribe_command))  # 🆕 Команда отписки
@@ -4398,8 +4576,25 @@ def main():
         
         if active_poll_jobs == 0:
             logger.warning("⚠️ CRITICAL: No active poll jobs scheduled!")
-            logger.warning("   This means polls will not be sent!")
-            logger.warning("   Check if polls.json contains valid future polls")
+            logger.warning("   Attempting immediate polls restore...")
+            
+            # Попытка экстренного восстановления голосований
+            if SHEETS_AVAILABLE and sheets_manager and sheets_manager.is_initialized:
+                try:
+                    success, message = sheets_manager.restore_polls_from_sheets()
+                    if success:
+                        logger.info("✅ Emergency polls restore successful, rescheduling...")
+                        reschedule_all_polls(updater.job_queue)
+                        final_reminder_jobs, final_poll_jobs = check_active_jobs(updater.job_queue)
+                        logger.info(f"🔄 After emergency polls restore: {final_reminder_jobs} reminder jobs, {final_poll_jobs} poll jobs")
+                    else:
+                        logger.error(f"❌ Emergency polls restore failed: {message}")
+                except Exception as e:
+                    logger.error(f"❌ Exception during emergency polls restore: {e}")
+            else:
+                logger.warning("📵 Google Sheets not available for emergency polls restore")
+                logger.warning("   This means polls will not be sent!")
+                logger.warning("   Check if polls.json contains valid future polls")
         
         # Добавляем ping каждые 5 минут для предотвращения засыпания на Render
         updater.job_queue.run_repeating(ping_self, interval=300, first=30)
