@@ -48,5 +48,8 @@ Thumbs.db
 
 # Temporary files
 *.tmp
+
+# Debug logs
+debug_logs.txt
 *.temp
 .cache/
