@@ -2198,7 +2198,7 @@ def receive_poll_question(update: Update, context: CallbackContext):
     update.message.reply_text(
         "📝 <b>Введите варианты ответов</b>\n\n"
         "Каждый вариант с новой строки.\n"
-        "Максимум 10 вариантов.\n\n"
+        "Максимум 12 вариантов.\n\n"
         "Пример:\n"
         "<code>Вариант 1\n"
         "Вариант 2\n"
@@ -2223,10 +2223,10 @@ def receive_poll_options(update: Update, context: CallbackContext):
         )
         return POLL_OPTIONS
     
-    if len(options) > 10:
+    if len(options) > 12:
         update.message.reply_text(
             "⚠️ <b>Слишком много вариантов!</b>\n\n"
-            "Максимум 10 вариантов ответа.\n"
+            "Максимум 12 вариантов ответа.\n"
             "Попробуйте сократить список.",
             parse_mode=ParseMode.HTML
         )
@@ -2371,7 +2371,7 @@ def receive_daily_poll_question(update: Update, context: CallbackContext):
     update.message.reply_text(
         "📝 <b>Введите варианты ответов</b>\n\n"
         "Каждый вариант с новой строки.\n"
-        "Максимум 10 вариантов.\n\n"
+        "Максимум 12 вариантов.\n\n"
         "Пример:\n"
         "<code>Вариант 1\n"
         "Вариант 2\n"
@@ -2396,10 +2396,10 @@ def receive_daily_poll_options(update: Update, context: CallbackContext):
         )
         return DAILY_POLL_OPTIONS
     
-    if len(options) > 10:
+    if len(options) > 12:
         update.message.reply_text(
             "⚠️ <b>Слишком много вариантов!</b>\n\n"
-            "Максимум 10 вариантов ответа.\n"
+            "Максимум 12 вариантов ответа.\n"
             "Попробуйте сократить список.",
             parse_mode=ParseMode.HTML
         )
@@ -2577,7 +2577,7 @@ def receive_weekly_poll_question(update: Update, context: CallbackContext):
     update.message.reply_text(
         "📝 <b>Введите варианты ответов</b>\n\n"
         "Каждый вариант с новой строки.\n"
-        "Максимум 10 вариантов.\n\n"
+        "Максимум 12 вариантов.\n\n"
         "Пример:\n"
         "<code>Вариант 1\n"
         "Вариант 2\n"
@@ -2602,10 +2602,10 @@ def receive_weekly_poll_options(update: Update, context: CallbackContext):
         )
         return WEEKLY_POLL_OPTIONS
     
-    if len(options) > 10:
+    if len(options) > 12:
         update.message.reply_text(
             "⚠️ <b>Слишком много вариантов!</b>\n\n"
-            "Максимум 10 вариантов ответа.\n"
+            "Максимум 12 вариантов ответа.\n"
             "Попробуйте сократить список.",
             parse_mode=ParseMode.HTML
         )
