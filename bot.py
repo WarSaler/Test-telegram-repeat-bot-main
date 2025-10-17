@@ -859,7 +859,8 @@ def list_polls(update: Update, context: CallbackContext):
                 elif p["type"] == "daily" or p["type"] == "daily_poll":
                     lines.append(f"{i}. [🔄 Ежедневно] {p['time']}\n❓ {safe_question}\n🔘 {options_preview}\n")
                 elif p["type"] == "weekly" or p["type"] == "weekly_poll":
-                    lines.append(f"{i}. [📆 Еженедельно] {p['day'].title()} {p['time']}\n❓ {safe_question}\n🔘 {options_preview}\n")
+                    day_str = str(p['day']).title() if p.get('day') else 'N/A'
+                    lines.append(f"{i}. [📆 Еженедельно] {day_str} {p['time']}\n❓ {safe_question}\n🔘 {options_preview}\n")
             except Exception as e:
                 logger.error(f"Error formatting poll {i}: {e}")
                 lines.append(f"{i}. [Ошибка формата]\n")
@@ -1796,7 +1797,8 @@ def start_delete_poll(update: Update, context: CallbackContext):
             elif poll_type == 'daily':
                 time_info = f"Ежедневно в {poll.get('time', 'N/A')}"
             elif poll_type == 'weekly':
-                time_info = f"{poll.get('day', 'N/A').title()} в {poll.get('time', 'N/A')}"
+                day_str = str(poll.get('day', 'N/A')).title() if poll.get('day') else 'N/A'
+                time_info = f"{day_str} в {poll.get('time', 'N/A')}"
             else:
                 time_info = 'N/A'
             
@@ -4647,6 +4649,7 @@ def main():
         
         dp.add_handler(CommandHandler("clear_reminders", clear_reminders))
         dp.add_handler(CommandHandler("clear_polls", clear_polls))
+        dp.add_handler(CommandHandler("delete_all_polls", clear_polls))
         dp.add_handler(CommandHandler("restore", restore_reminders))
         dp.add_handler(CommandHandler("restore_polls", restore_polls))
         dp.add_handler(CommandHandler("next", next_notification))
